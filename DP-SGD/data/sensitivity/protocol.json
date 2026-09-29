@@ -1,0 +1,118 @@
+{
+  "points": {
+    "e2_0.01_n1_10000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.01,
+      "n_1": 10000,
+      "n_2": 40000
+    },
+    "e2_0.03_n1_10000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.03,
+      "n_1": 10000,
+      "n_2": 40000
+    },
+    "e2_0.1_n1_10000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.1,
+      "n_1": 10000,
+      "n_2": 40000
+    },
+    "e2_0.3_n1_10000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.3,
+      "n_1": 10000,
+      "n_2": 40000
+    },
+    "e2_1_n1_10000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 1.0,
+      "n_1": 10000,
+      "n_2": 40000
+    },
+    "e2_3_n1_10000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 3.0,
+      "n_1": 10000,
+      "n_2": 40000
+    },
+    "e2_10_n1_10000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 10.0,
+      "n_1": 10000,
+      "n_2": 40000
+    },
+    "e2_0.1_n1_1000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.1,
+      "n_1": 1000,
+      "n_2": 49000
+    },
+    "e2_0.1_n1_2500": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.1,
+      "n_1": 2500,
+      "n_2": 47500
+    },
+    "e2_0.1_n1_5000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.1,
+      "n_1": 5000,
+      "n_2": 45000
+    },
+    "e2_0.1_n1_20000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.1,
+      "n_1": 20000,
+      "n_2": 30000
+    },
+    "e2_0.1_n1_35000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.1,
+      "n_1": 35000,
+      "n_2": 15000
+    },
+    "e2_0.1_n1_45000": {
+      "epsilon_1": 1.0,
+      "epsilon_2": 0.1,
+      "n_1": 45000,
+      "n_2": 5000
+    }
+  },
+  "sweeps": {
+    "epsilon2": [
+      "e2_0.01_n1_10000",
+      "e2_0.03_n1_10000",
+      "e2_0.1_n1_10000",
+      "e2_0.3_n1_10000",
+      "e2_1_n1_10000",
+      "e2_3_n1_10000",
+      "e2_10_n1_10000"
+    ],
+    "group_sizes": [
+      "e2_0.1_n1_1000",
+      "e2_0.1_n1_2500",
+      "e2_0.1_n1_5000",
+      "e2_0.1_n1_10000",
+      "e2_0.1_n1_20000",
+      "e2_0.1_n1_35000",
+      "e2_0.1_n1_45000"
+    ]
+  },
+  "seeds": [
+    200,
+    201,
+    202,
+    203,
+    204
+  ],
+  "recipe": [
+    1000,
+    30,
+    0.00625
+  ],
+  "parallel": 32,
+  "clip_norm": 16.0,
+  "dimension": 558538,
+  "note": "Fixed-recipe sensitivity experiment; no tuning or best-test-epoch selection. Pointwise paired 95% t intervals, conditional on fixed privacy assignment. Per-run DP accounting excludes exact research diagnostics and repeated runs."
+}

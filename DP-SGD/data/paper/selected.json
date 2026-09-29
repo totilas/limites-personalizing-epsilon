@@ -1,0 +1,74 @@
+{
+  "eps1_eps001": {
+    "scenario": "eps1_eps001",
+    "batch": 1000,
+    "epochs": 30,
+    "lr": 0.00625,
+    "selection_score": 0.30343333333333333,
+    "threshold": 0.3010666666666667,
+    "personalized": 0.3058
+  },
+  "eps1_eps01": {
+    "scenario": "eps1_eps01",
+    "batch": 1000,
+    "epochs": 30,
+    "lr": 0.00625,
+    "selection_score": 0.32333333333333336,
+    "threshold": 0.30093333333333333,
+    "personalized": 0.34573333333333334
+  },
+  "eps4_eps1": {
+    "scenario": "eps4_eps1",
+    "batch": 1000,
+    "epochs": 60,
+    "lr": 0.01875,
+    "selection_score": 0.46253333333333335,
+    "threshold": 0.44553333333333334,
+    "personalized": 0.4795333333333333
+  },
+  "eps8_eps1": {
+    "scenario": "eps8_eps1",
+    "batch": 1000,
+    "epochs": 60,
+    "lr": 0.01875,
+    "selection_score": 0.47273333333333334,
+    "threshold": 0.445,
+    "personalized": 0.5004666666666666
+  },
+  "eps8_eps4": {
+    "scenario": "eps8_eps4",
+    "batch": 1000,
+    "epochs": 60,
+    "lr": 0.04375,
+    "selection_score": 0.5463666666666667,
+    "threshold": 0.5396666666666666,
+    "personalized": 0.5530666666666666
+  },
+  "public_private": {
+    "scenario": "public_private",
+    "batch": 1000,
+    "epochs": 90,
+    "lr": 0.04375,
+    "selection_score": 0.7234,
+    "threshold": 0.7217333333333333,
+    "personalized": 0.7250666666666666
+  },
+  "survey": {
+    "scenario": "survey",
+    "batch": 1000,
+    "epochs": 30,
+    "lr": 0.00625,
+    "selection_score": 0.32103333333333334,
+    "threshold": 0.28313333333333335,
+    "personalized": 0.3589333333333333
+  },
+  "survey_x8": {
+    "scenario": "survey_x8",
+    "batch": 1000,
+    "epochs": 60,
+    "lr": 0.01875,
+    "selection_score": 0.4729,
+    "threshold": 0.43846666666666667,
+    "personalized": 0.5073333333333333
+  }
+}

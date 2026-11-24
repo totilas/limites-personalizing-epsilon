@@ -88,14 +88,21 @@ noncomputable def renyiDiv (α : ℝ) (P Q : Measure Ω) : EReal :=
 /-- `ρ`-zCDP for a neighbouring relation `Adj`: `D_α(M(D)‖M(D')) ≤ ρ α` for all `α > 1`
 and all `Adj D D'`. -/
 def ZCDP {Data Y : Type*} [MeasurableSpace Y] (Adj : Data → Data → Prop)
-    (M : Data → Measure Y) (ρ : ℝ) : Prop :=
-  ∀ D D', Adj D D' → ∀ α : ℝ, 1 < α → renyiDiv α (M D) (M D') ≤ ((ρ * α : ℝ) : EReal)
+    (PM : Data → Measure Y) (ρ : ℝ) : Prop :=
+  ∀ D D', Adj D D' → ∀ α : ℝ, 1 < α → renyiDiv α (PM D) (PM D') ≤ ((ρ * α : ℝ) : EReal)
 
 /-- **Heterogeneous zCDP.**  `M` is `ρᵢ`-zCDP with respect to record `i`, for every `i`:
 `D_α(M(D)‖M(D')) ≤ ρᵢ α` for all `α > 1` and all `D, D'` differing only in record `i`. -/
-def HetZCDP {n : ℕ} {X Y : Type*} [MeasurableSpace Y] (M : (Fin n → X) → Measure Y)
+def HetZCDP {n : ℕ} {X Y : Type*} [MeasurableSpace Y] (PM : (Fin n → X) → Measure Y)
     (ρ : Fin n → ℝ) : Prop :=
-  ∀ i, ZCDP (NeighborAt i) M (ρ i)
+  ∀ i, ZCDP (NeighborAt i) PM (ρ i)
+
+/-- **Heterogeneous zCDP with public records.**  Records in `pub` have budget `+∞`
+(no constraint); every other record `i` is `ρᵢ`-zCDP.  With `pub = ∅` this is
+`HetZCDP`. -/
+def HetZCDPPub {n : ℕ} {X Y : Type*} [MeasurableSpace Y] (pub : Finset (Fin n))
+    (PM : (Fin n → X) → Measure Y) (ρ : Fin n → ℝ) : Prop :=
+  ∀ i ∉ pub, ZCDP (NeighborAt i) PM (ρ i)
 
 /-- Rényi divergence of a measure given by an explicit density. -/
 lemma renyiDiv_withDensity (Q : Measure Ω) [SigmaFinite Q] {g : Ω → ℝ≥0∞}

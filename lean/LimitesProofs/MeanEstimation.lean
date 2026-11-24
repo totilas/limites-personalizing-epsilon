@@ -1,6 +1,7 @@
 import LimitesProofs.Laplace
 import LimitesProofs.Privacy.Defs
 import LimitesProofs.Risks
+import LimitesProofs.PublicPrivate
 
 /-!
 # Private mean estimation: Laplace, affine and threshold estimators
@@ -25,6 +26,14 @@ Paper result ↔ Lean name.
   `sInf_thrRiskSet` (its infimum over thresholds equals `thrRisk ∅ ε (1/4) 2`).
 * Proof of Theorem `thm:lower-bound-general-m-levels` (`P = δ₀`):
   `mse_thrMech_dirac_zero`.
+* Public records (budget `+∞`, Section `sec:public_case`), with `HetDPPub pub`:
+  `affineMech_hetDPPub_iff` (DP iff `η ≥ wᵢ/ε⁽ⁱ⁾` for every non-public `i`; per-record
+  form `affineMech_dpAt_iff`), `sInf_affRiskSetPub` (best affine DR-MSE equals
+  `persRisk pub ε (1/4) 2`; an equality of infima, since `persRisk` allows `M = 0`),
+  the threshold mechanism `thrMechPub` keeping public records (`thrMechPub_empty`,
+  `thrMechPub_hetDPPub`, `drMSE_thrMechPub`, `sInf_thrRiskSetPub`), and the
+  mechanism-level Theorem `thm:public-data-factor-2`: `public_mse_factor_two`
+  (`MSE_thr ≤ 2 MSE_aff` for actual DP mechanisms).
 
 Conventions.  Datasets are `Fin n → ℝ`.  A mechanism is a map from datasets to the law
 of its output (`Measure ℝ`); privacy is stated for datasets with records in
@@ -418,5 +427,237 @@ theorem mse_thrMech_dirac_zero {n : ℕ} {ε : Fin n → ℝ} {t : ℝ} (ht : 0 
     (sum_thrWeights hN),
     variance_dirac, zero_mul, zero_add]
   field_simp
+
+/-! ## Public records
+
+Records in a finset `pub` are public (budget `+∞`, Section `sec:public_case`): privacy is
+required only for `i ∉ pub` (`HetDPPub`). -/
+
+section Public
+
+variable {n : ℕ}
+
+/-- **Section "Best affine estimator", one record at a time.**  For `wᵢ ≥ 0`, `η > 0` and
+`ε⁽ⁱ⁾ > 0`, the affine estimator `∑ wⱼ xⱼ + Lap(η)` satisfies the `ε⁽ⁱ⁾`-DP inequality for
+changes of record `i` iff `η ≥ wᵢ/ε⁽ⁱ⁾`. -/
+theorem affineMech_dpAt_iff {w : Fin n → ℝ} {η : ℝ} {ε : Fin n → ℝ} (i : Fin n)
+    (hw : 0 ≤ w i) (hη : 0 < η) (hεi : 0 < ε i) :
+    (∀ D D' : Fin n → Rec, NeighborAt i D D' → ∀ S, MeasurableSet S →
+      affineMech w η (fun j => (D j : ℝ)) S
+        ≤ ENNReal.ofReal (Real.exp (ε i)) * affineMech w η (fun j => (D' j : ℝ)) S) ↔
+      w i / ε i ≤ η := by
+  constructor
+  · intro h
+    by_contra hlt
+    push Not at hlt
+    have hwi : η * ε i < w i := by rwa [lt_div_iff₀ hεi] at hlt
+    let lo : Rec := ⟨-1/2, by norm_num, by norm_num⟩
+    let hi : Rec := ⟨1/2, by norm_num, by norm_num⟩
+    let D : Fin n → Rec := fun _ => lo
+    let D' : Fin n → Rec := Function.update D i hi
+    have hnb : NeighborAt i D D' := fun j hj => (Function.update_of_ne hj hi D).symm
+    set c := ∑ j, w j * (D j : ℝ) with hc
+    have hc' : ∑ j, w j * (D' j : ℝ) = c + w i := by
+      have := sum_sub_of_neighborAt w hnb
+      simp only [D', Function.update_self, D] at this
+      simp only [D', D, hc]
+      norm_num at this ⊢
+      linarith
+    have key := h D D' hnb (Iic c) measurableSet_Iic
+    simp only [affineMech, laplaceMech, hc'] at key
+    rw [← hc, Measure.map_apply (measurable_const_add _) measurableSet_Iic,
+      Measure.map_apply (measurable_const_add _) measurableSet_Iic] at key
+    have e1 : (fun z => c + z) ⁻¹' Iic c = Iic (-0) := by ext z; simp
+    have e2 : (fun z => c + w i + z) ⁻¹' Iic c = Iic (-w i) := by
+      ext z; simp only [mem_preimage, mem_Iic]; constructor <;> intro <;> linarith
+    rw [e1, e2, laplace_Iic_neg hη le_rfl, laplace_Iic_neg hη hw,
+      ← ENNReal.ofReal_mul (Real.exp_pos _).le,
+      ENNReal.ofReal_le_ofReal_iff (by positivity)] at key
+    have hlt' : ε i - w i / η < 0 := by
+      rw [sub_neg, lt_div_iff₀ hη]; linarith
+    have : Real.exp (ε i) * (Real.exp (-w i / η) / 2) < Real.exp (-0 / η) / 2 := by
+      rw [neg_zero, zero_div, Real.exp_zero, ← mul_div_assoc, ← Real.exp_add,
+        div_lt_div_iff_of_pos_right two_pos, ← Real.exp_zero, Real.exp_lt_exp, neg_div]
+      linarith
+    linarith
+  · intro h D D' hnb S hS
+    simp only [affineMech, laplaceMech]
+    refine (laplace_map_const_add_le hη _ (∑ j, w j * (D' j : ℝ)) hS).trans ?_
+    gcongr
+    rw [sum_sub_of_neighborAt w hnb, abs_mul, abs_of_nonneg hw, div_le_iff₀ hη]
+    have hd : |((D i : ℝ) - D' i)| ≤ 1 := by
+      rw [abs_le]; constructor <;> linarith [(D i).2.1, (D i).2.2, (D' i).2.1, (D' i).2.2]
+    have := (div_le_iff₀ hεi).mp h
+    calc w i * |((D i : ℝ) - D' i)| ≤ w i * 1 := mul_le_mul_of_nonneg_left hd hw
+      _ ≤ ε i * η := by linarith
+
+/-- **Section "Best affine estimator", with public records.**  For `w ≥ 0`, `η > 0` and
+`ε⁽ⁱ⁾ > 0` for every non-public `i`, the affine estimator `∑ wᵢ xᵢ + Lap(η)` is
+heterogeneous `ε`-DP with public records `pub` iff `η ≥ wᵢ/ε⁽ⁱ⁾` for every `i ∉ pub`. -/
+theorem affineMech_hetDPPub_iff {pub : Finset (Fin n)} {w : Fin n → ℝ} {η : ℝ}
+    {ε : Fin n → ℝ} (hw : ∀ i, 0 ≤ w i) (hη : 0 < η) (hε : ∀ i ∉ pub, 0 < ε i) :
+    HetDPPub pub (fun D : Fin n → Rec => affineMech w η (fun i => (D i : ℝ))) ε ↔
+      ∀ i ∉ pub, w i / ε i ≤ η :=
+  forall₂_congr fun i hi => affineMech_dpAt_iff i (hw i) hη (hε i hi)
+
+/-- Two sets of reals have the same infimum when `A ⊆ B`, `B` is bounded below, and every
+element of `B` is approximated from above by elements of `A`. -/
+lemma sInf_eq_of_subset_of_approx {A B : Set ℝ} (hAB : A ⊆ B) (hB : BddBelow B)
+    (happrox : ∀ b ∈ B, ∀ δ, 0 < δ → ∃ a ∈ A, a ≤ b + δ) : sInf A = sInf B := by
+  rcases B.eq_empty_or_nonempty with hBe | ⟨b, hb⟩
+  · have hAe : A = ∅ := by simpa [hBe] using hAB
+    rw [hAe, hBe]
+  obtain ⟨a, ha, -⟩ := happrox b hb 1 one_pos
+  refine le_antisymm (le_of_forall_pos_le_add fun δ hδ => ?_)
+    (csInf_le_csInf hB ⟨a, ha⟩ hAB)
+  obtain ⟨b', hb', hlt⟩ := exists_lt_of_csInf_lt ⟨b, hb⟩
+    (lt_add_of_pos_right (sInf B) (half_pos hδ))
+  obtain ⟨a', ha', hle⟩ := happrox b' hb' (δ / 2) (half_pos hδ)
+  calc sInf A ≤ a' := csInf_le (hB.mono hAB) ha'
+    _ ≤ sInf B + δ := by linarith
+
+/-- DR-MSEs of all unbiased affine Laplace estimators that are heterogeneous `ε`-DP with
+public records `pub`. -/
+def affRiskSetPub (pub : Finset (Fin n)) (ε : Fin n → ℝ) : Set ℝ :=
+  {r | ∃ (w : Fin n → ℝ) (η : ℝ), (∀ i, 0 ≤ w i) ∧ ∑ i, w i = 1 ∧ 0 < η ∧
+    HetDPPub pub (fun D : Fin n → Rec => affineMech w η (fun i => (D i : ℝ))) ε ∧
+    drMSE (affineMech w η) = r}
+
+/-- **Lemma `clm:threshold_characterization` with public records (Eq.
+`eq:mseafftedious`).**  The infimum of the DR-MSE over unbiased affine Laplace estimators
+that are heterogeneous `ε`-DP with public records `pub` equals `𝓡_pers(ε; 1/4, 2)`.
+Mechanisms need `η > 0` while `𝓡_pers` allows `M = 0`, so the two sets differ and only
+their infima agree (approximation by `M + δ`). -/
+theorem sInf_affRiskSetPub {pub : Finset (Fin n)} {ε : Fin n → ℝ}
+    (hε : ∀ i ∉ pub, 0 < ε i) :
+    sInf (affRiskSetPub pub ε) = persRisk pub ε (1 / 4) 2 := by
+  unfold persRisk
+  refine sInf_eq_of_subset_of_approx ?_ ⟨0, ?_⟩ ?_
+  · rintro _ ⟨w, η, hw, hsum, hη, hdp, rfl⟩
+    refine ⟨w, η, ⟨hw, hsum, hη.le, fun i hi => ?_⟩, ?_⟩
+    · have := (affineMech_hetDPPub_iff hw hη hε).mp hdp i hi
+      rwa [div_le_iff₀ (hε i hi)] at this
+    · rw [drMSE_affineMech hη hsum, persObj]
+  · rintro _ ⟨w, M, -, rfl⟩
+    exact persObj_nonneg (by norm_num) (by norm_num) w M
+  · rintro _ ⟨w, M, ⟨hw, hsum, hM, hwM⟩, rfl⟩ δ hδ
+    set d := min 1 (δ / (4 * M + 2)) with hd
+    have hd0 : 0 < d := lt_min one_pos (by positivity)
+    have hd1 : d ≤ 1 := min_le_left _ _
+    have hd2 : d * (4 * M + 2) ≤ δ := by
+      have := min_le_right 1 (δ / (4 * M + 2))
+      rwa [← hd, le_div_iff₀ (by positivity)] at this
+    have hη : 0 < M + d := by linarith
+    refine ⟨_, ⟨w, M + d, hw, hsum, hη,
+      (affineMech_hetDPPub_iff hw hη hε).mpr fun i hi => ?_, rfl⟩, ?_⟩
+    · rw [div_le_iff₀ (hε i hi)]
+      nlinarith [hwM i hi, mul_pos hd0 (hε i hi)]
+    · rw [drMSE_affineMech hη hsum, persObj]
+      nlinarith [mul_le_mul_of_nonneg_left hd1 hd0.le]
+
+/-- The weights `𝟙(i ∈ pub ∨ ε⁽ⁱ⁾ ≥ t) / n_t` of the threshold mechanism with public
+records. -/
+noncomputable def thrWeightsPub (pub : Finset (Fin n)) (ε : Fin n → ℝ) (t : ℝ)
+    (i : Fin n) : ℝ :=
+  (if i ∈ pub ∨ t ≤ ε i then 1 else 0) / (nThr pub ε t : ℝ)
+
+/-- **Definition "Unique-threshold `ε` estimator", with public records**: the threshold
+mechanism keeps the public records and those with `ε⁽ⁱ⁾ ≥ t`,
+`M_t(D) = (1/n_t) ∑ᵢ 𝟙(i ∈ pub ∨ ε⁽ⁱ⁾ ≥ t) xᵢ + Lap(Δ/(n_t t))` with `Δ = 1`, where
+`n_t = nThr pub ε t`. -/
+noncomputable def thrMechPub (pub : Finset (Fin n)) (ε : Fin n → ℝ) (t : ℝ)
+    (x : Fin n → ℝ) : Measure ℝ :=
+  (laplace (1 / ((nThr pub ε t : ℝ) * t))).map
+    (fun z => 1 / (nThr pub ε t : ℝ) *
+      ∑ i, (if i ∈ pub ∨ t ≤ ε i then (1 : ℝ) else 0) * x i + z)
+
+/-- With no public record, `thrMechPub` is the threshold mechanism `thrMech`. -/
+lemma thrMechPub_empty (ε : Fin n → ℝ) (t : ℝ) : thrMechPub ∅ ε t = thrMech ε t := by
+  funext x
+  simp [thrMechPub, thrMech]
+
+lemma thrMechPub_eq_affineMech (pub : Finset (Fin n)) (ε : Fin n → ℝ) (t : ℝ) :
+    thrMechPub pub ε t
+      = affineMech (thrWeightsPub pub ε t) (1 / ((nThr pub ε t : ℝ) * t)) := by
+  funext x
+  simp only [thrMechPub, affineMech, laplaceMech, thrWeightsPub, Finset.mul_sum]
+  congr 2; ext z; congr 1; refine Finset.sum_congr rfl fun i _ => ?_; ring
+
+lemma nThr_eq_sum (pub : Finset (Fin n)) (ε : Fin n → ℝ) (t : ℝ) :
+    (nThr pub ε t : ℝ) = ∑ i, if i ∈ pub ∨ t ≤ ε i then (1 : ℝ) else 0 := by
+  simp [nThr, Finset.sum_boole]
+
+lemma thrWeightsPub_nonneg (pub : Finset (Fin n)) (ε : Fin n → ℝ) (t : ℝ) (i : Fin n) :
+    0 ≤ thrWeightsPub pub ε t i := by
+  unfold thrWeightsPub; split_ifs <;> positivity
+
+lemma sum_thrWeightsPub {pub : Finset (Fin n)} {ε : Fin n → ℝ} {t : ℝ}
+    (hN : 0 < nThr pub ε t) : ∑ i, thrWeightsPub pub ε t i = 1 := by
+  have hN' : (0 : ℝ) < nThr pub ε t := by exact_mod_cast hN
+  simp only [thrWeightsPub, ← Finset.sum_div, ← nThr_eq_sum]
+  exact div_self hN'.ne'
+
+lemma sum_sq_thrWeightsPub {pub : Finset (Fin n)} {ε : Fin n → ℝ} {t : ℝ}
+    (hN : 0 < nThr pub ε t) :
+    ∑ i, thrWeightsPub pub ε t i ^ 2 = 1 / (nThr pub ε t : ℝ) := by
+  have hN' : (0 : ℝ) < nThr pub ε t := by exact_mod_cast hN
+  have : ∀ i, thrWeightsPub pub ε t i ^ 2
+      = (if i ∈ pub ∨ t ≤ ε i then (1 : ℝ) else 0) / (nThr pub ε t : ℝ) ^ 2 :=
+    fun i => by unfold thrWeightsPub; split_ifs <;> simp
+  simp only [this, ← Finset.sum_div, ← nThr_eq_sum]
+  field_simp
+
+/-- **Definition "Unique-threshold `ε` estimator", with public records**: for a threshold
+`t > 0` retaining `n_t ≥ 1` records, `thrMechPub pub ε t` is heterogeneous `ε`-DP with
+public records `pub`. -/
+theorem thrMechPub_hetDPPub {pub : Finset (Fin n)} {ε : Fin n → ℝ}
+    (hε : ∀ i ∉ pub, 0 < ε i) {t : ℝ} (ht : 0 < t) (hN : 0 < nThr pub ε t) :
+    HetDPPub pub (fun D : Fin n → Rec => thrMechPub pub ε t (fun i => (D i : ℝ))) ε := by
+  have hN' : (0 : ℝ) < nThr pub ε t := by exact_mod_cast hN
+  rw [thrMechPub_eq_affineMech]
+  refine (affineMech_hetDPPub_iff (thrWeightsPub_nonneg pub ε t)
+    (div_pos one_pos (mul_pos hN' ht)) hε).mpr fun i hi => ?_
+  unfold thrWeightsPub
+  split_ifs with h
+  · rw [div_div, one_div_le_one_div (mul_pos hN' (hε i hi)) (mul_pos hN' ht)]
+    exact mul_le_mul_of_nonneg_left (h.resolve_left hi) hN'.le
+  · simp only [zero_div]; exact (div_pos one_pos (mul_pos hN' ht)).le
+
+/-- **Eq. `eq:msethr`, with public records.**  For `t > 0` retaining `n_t ≥ 1` records,
+the DR-MSE of `thrMechPub pub ε t` is `1/(4 n_t) + 2/(t n_t)²`. -/
+theorem drMSE_thrMechPub {pub : Finset (Fin n)} {ε : Fin n → ℝ} {t : ℝ} (ht : 0 < t)
+    (hN : 0 < nThr pub ε t) :
+    drMSE (thrMechPub pub ε t) = thrObj (1 / 4) 2 t (nThr pub ε t) := by
+  have hN' : (0 : ℝ) < nThr pub ε t := by exact_mod_cast hN
+  rw [thrMechPub_eq_affineMech, drMSE_affineMech (div_pos one_pos (mul_pos hN' ht))
+    (sum_thrWeightsPub hN), sum_sq_thrWeightsPub hN, thrObj]
+  field_simp
+
+/-- **Eq. `eq:msethr`, with public records.**  The infimum over thresholds `t > 0` with
+`n_t ≥ 1` of the DR-MSE of `thrMechPub pub ε t` equals `𝓡_thr(ε; 1/4, 2)`. -/
+theorem sInf_thrRiskSetPub (pub : Finset (Fin n)) (ε : Fin n → ℝ) :
+    sInf {r | ∃ t, 0 < t ∧ 0 < nThr pub ε t ∧ drMSE (thrMechPub pub ε t) = r}
+      = thrRisk pub ε (1 / 4) 2 := by
+  unfold thrRisk thrSet
+  congr 1
+  ext r
+  constructor
+  · rintro ⟨t, ht, hN, rfl⟩; exact ⟨t, ht, hN, (drMSE_thrMechPub ht hN).symm⟩
+  · rintro ⟨t, ht, hN, rfl⟩; exact ⟨t, ht, hN, drMSE_thrMechPub ht hN⟩
+
+/-- **Theorem `thm:public-data-factor-2`, for mechanisms.**  If every non-public record
+has budget `ε₁ > 0` and there are both public and private records, the best DR-MSE of the
+heterogeneous-DP threshold mechanisms `thrMechPub` is at most twice the best DR-MSE of
+the heterogeneous-DP unbiased affine Laplace estimators: `MSE_thr ≤ 2 MSE_aff`. -/
+theorem public_mse_factor_two (pub : Finset (Fin n)) (ε : Fin n → ℝ) (ε₁ : ℝ)
+    (hε₁ : 0 < ε₁) (hpub : pub.Nonempty) (hpriv : pubᶜ.Nonempty)
+    (hu : ∀ i ∉ pub, ε i = ε₁) :
+    sInf {r | ∃ t, 0 < t ∧ 0 < nThr pub ε t ∧ drMSE (thrMechPub pub ε t) = r}
+      ≤ 2 * sInf (affRiskSetPub pub ε) := by
+  rw [sInf_thrRiskSetPub, sInf_affRiskSetPub fun i hi => (hu i hi).symm ▸ hε₁]
+  exact public_data_factor_two pub ε ε₁ (1 / 4) 2 hε₁ (by norm_num) (by norm_num)
+    hpub hpriv hu
+
+end Public
 
 end Limites

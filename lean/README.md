@@ -10,16 +10,18 @@ proposition, corollary and lemma, and the mathematical content of the remarks,
 including the privacy guarantees, the mean-squared errors, and convergence in
 expectation. It compiles against Mathlib v4.33.0 with no `sorry`, and the main
 theorems use only Lean's standard axioms (`propext`, `Classical.choice`,
-`Quot.sound`). Not covered:
-- the cited Shamir–Zhang theorem;
-- the `O(n log n)` running time for computing the optimal cap;
-- the link between the risk formula and actual mechanisms when some records are
-  public. The public-data bounds themselves are proved on the risk formulas.
+`Quot.sound`). Not covered: the cited Shamir–Zhang theorem, and the `O(n log n)`
+running time for computing the optimal cap.
 
 ```bash
 lake exe cache get   # download precompiled Mathlib (once)
 lake build
 ```
+
+**Cross-check with Statlib.** Our Rényi divergence (`Renyi.lean`), on which zCDP
+rests, provably equals the one of [Statlib](https://github.com/stat-lib/statlib) for
+probability measures and every order α > 1. The proof lives in a separate project,
+`../lean-bridges/renyi-statlib`, because Statlib uses a newer Lean version.
 
 ## Files
 
@@ -38,7 +40,7 @@ PDF. (Docstrings inside the `.lean` files cite the LaTeX labels instead.)
 
 | Paper | Lean |
 |---|---|
-| Definition 1 (approximate DP), Definition 4 (heterogeneous DP) | `ApproxDP`, `HetDP`, `NeighborAt` |
+| Definition 1 (approximate DP), Definition 4 (heterogeneous DP) | `ApproxDP`, `HetDP`, `NeighborAt`; `HetDPPub` (with public records, budget +∞) |
 | Definition 3 (arbitrary personalized DP) and the folklore result after it (Section II) | `ArbitraryPersonalizedDP`, `ArbitraryPersonalizedDP.approxDP` |
 | Lemma 5 (per-record preprocessing) | `HetDP.comp_preprocess` |
 | Remark 1 (single gradient release is heterogeneous mean estimation) | `oneStepMinimaxRisk_le_meanEstMinimaxRisk`, `oneStepMinimaxRisk_linear`, `sSup_oneStepMinimaxRisk` |
@@ -54,6 +56,8 @@ PDF. (Docstrings inside the `.lean` files cite the LaTeX labels instead.)
 | Lemma 1, first equality of Eq. (1) | `sInf_affRiskSet` |
 | Definition 6 (unique-threshold estimator), Eq. (2) | `thrMech_hetDP`, `drMSE_thrMech`, `sInf_thrRiskSet` |
 | Proof of Theorem 3 (Appendix E), the case P = δ₀ | `mse_thrMech_dirac_zero` |
+| The same with public records | `affineMech_hetDPPub_iff`, `sInf_affRiskSetPub`, `thrMechPub_hetDPPub`, `drMSE_thrMechPub`, `sInf_thrRiskSetPub` |
+| Theorem 1 for actual DP mechanisms (MSE_thr ≤ 2 MSE_aff) | `public_mse_factor_two` |
 
 ### `Characterization.lean` — exact formulas and examples
 
@@ -89,11 +93,13 @@ PDF. (Docstrings inside the `.lean` files cite the LaTeX labels instead.)
 
 | Paper | Lean |
 |---|---|
-| Rényi divergence, zCDP, Gaussian mechanism | `renyiDiv`, `HetZCDP`, `renyiDiv_gaussNoise`, `gaussMech_zCDP` |
+| Rényi divergence, zCDP, Gaussian mechanism | `renyiDiv`, `HetZCDP`, `HetZCDPPub`, `renyiDiv_gaussNoise`, `gaussMech_zCDP` |
 | Proposition 1, Eqs. (9)–(10) (privacy, MSE) | `affineRelease_hetZCDP_iff`, `affineMSE_eq`, `affineMSE_le` |
 | Definition 8, Eq. (11) | `persOracleMSE_eq` |
 | Eq. (12) (threshold oracle) | `thrRelease_hetZCDP`, `thrMSE_eq`, `thrOracleMSE_eq` |
 | Remark after Lemma 5: preprocessing preserves zCDP | `hetZCDP_preprocess` |
+| The oracles with public gradients | `affineRelease_hetZCDPPub_iff`, `persOracleMSEPub_eq`, `thrReleasePub_hetZCDPPub`, `thrMSEPub_eq`, `thrOracleMSEPub_eq` |
+| Theorem 4, public case, for actual oracles (r_g ≤ 2) | `gradient_public_factor_two` |
 
 ### `DPSGD.lean` — Section VI
 

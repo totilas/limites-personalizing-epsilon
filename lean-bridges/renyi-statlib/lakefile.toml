@@ -1,0 +1,21 @@
+name = "RenyiBridge"
+defaultTargets = ["RenyiBridge"]
+
+[leanOptions]
+pp.unicode.fun = true
+relaxedAutoImplicit = false
+weak.linter.mathlibStandardSet = true
+weak.linter.style.header = false
+
+[[require]]
+name = "Statlib"
+git = "https://github.com/stat-lib/statlib"
+rev = "8c95743db43600d829d675bf3f8675be65e1ef10"
+
+# Verbatim copies of the two definition files of the main project (see check-sync.sh).
+[[lean_lib]]
+name = "LimitesProofs"
+roots = ["LimitesProofs.Privacy.Defs", "LimitesProofs.Renyi"]
+
+[[lean_lib]]
+name = "RenyiBridge"

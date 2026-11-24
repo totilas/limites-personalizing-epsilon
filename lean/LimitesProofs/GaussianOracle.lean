@@ -1,5 +1,6 @@
 import LimitesProofs.Renyi
 import LimitesProofs.Risks
+import LimitesProofs.PublicPrivate
 
 /-!
 # Gaussian gradient oracles (Section `sec:affine-private-gradients`)
@@ -27,6 +28,12 @@ probability space `(Ω, P)` with common mean `m = ∇F(θ)` and `E‖gᵢ − m�
 * `thrRelease`, `thrRelease_hetZCDP`, `thrMSE_eq`, `thrOracleMSE`, `thrOracleMSE_eq` —
   Eqs. `eq:threshold-gradient` and `eq:gradient-threshold-risk`:
   `𝒱_thr(θ) = 𝓡_thr(u; V(θ), 2dC²)`.
+* Public records (budget `+∞`, `HetZCDPPub`): `affineRelease_hetZCDPPub_iff`;
+  `persOracleMSEPub`, `persOracleMSEPub_eq` (`𝒱_pers = 𝓡_pers(u; V, 2dC²)`, an equality of
+  infima: `𝓡_pers` allows `M = 0`); `thrReleasePub`, `thrReleasePub_hetZCDPPub`,
+  `thrMSEPub_eq`, `thrOracleMSEPub`, `thrOracleMSEPub_eq` (`𝒱_thr = 𝓡_thr(u; V, 2dC²)`);
+  `gradient_public_factor_two` — Thm. `thm:gradient-personalization-gap`, case "one finite level,
+  public gradients allowed": `𝒱_thr ≤ 2 𝒱_pers` at the oracle level.
 * `hetZCDP_preprocess` (in `Renyi.lean`) — remark after Lemma `lem:preprocessing`.
 -/
 
@@ -540,5 +547,280 @@ theorem thrOracleMSE_eq (C : ℝ) (u : Fin n → ℝ) {P : Measure Ω} [IsProbab
     exact ⟨t, ht, hN, thrMSE_eq C u hN g m hg hmean hind hV⟩
 
 end Thr
+
+/-! ## Public records (Thm. `thm:gradient-personalization-gap`, public case)
+
+Records in `pub` are public (budget `ρᵢ = +∞`): the releases are only required to be
+`ρᵢ`-zCDP for `i ∉ pub` (`HetZCDPPub`), and the threshold release always keeps them. -/
+
+section Pub
+
+variable {Ω : Type*} [MeasurableSpace Ω]
+
+/-- Record-wise sufficiency in Eq. `eq:affine-gradient-noise-formal`. -/
+lemma affineRelease_zCDP_of {C : ℝ} (w : Fin n → ℝ) {s : ℝ} (hs : 0 < s) (i : Fin n)
+    {r : ℝ} (h : 2 * C ^ 2 * w i ^ 2 / s ^ 2 ≤ r) :
+    ZCDP (NeighborAt i) (affineRelease (d := d) C w s) r := by
+  have := affineRelease_hetZCDP_of (d := d) (C := C) w hs
+    (Function.update (fun j ↦ 2 * C ^ 2 * w j ^ 2 / s ^ 2) i r) fun j ↦ by
+      by_cases hj : j = i
+      · subst hj; simpa using h
+      · simp [Function.update_of_ne hj]
+  simpa using this i
+
+/-- Record-wise form of `affineRelease_hetZCDP_iff`: the affine release is `r`-zCDP for
+record `i` iff `2 C² wᵢ² / s² ≤ r`. -/
+lemma affineRelease_zCDP_iff (hd : 0 < d) {C : ℝ} (hC : 0 ≤ C) (w : Fin n → ℝ) {s : ℝ}
+    (hs : 0 < s) (i : Fin n) (r : ℝ) :
+    ZCDP (NeighborAt i) (affineRelease (d := d) C w s) r ↔ 2 * C ^ 2 * w i ^ 2 / s ^ 2 ≤ r := by
+  refine ⟨fun h ↦ ?_, affineRelease_zCDP_of w hs i⟩
+  set ρ' : Fin n → ℝ := Function.update (fun j ↦ 2 * C ^ 2 * w j ^ 2 / s ^ 2) i r
+  have hH : HetZCDP (affineRelease (d := d) C w s) ρ' := fun j ↦ by
+    by_cases hj : j = i
+    · subst hj; simpa [ρ'] using h
+    · exact affineRelease_zCDP_of w hs j (by simp [ρ', Function.update_of_ne hj])
+  simpa [ρ'] using (affineRelease_hetZCDP_iff hd hC w hs ρ').1 hH i
+
+/-- **Prop. `prop:affine-gradient-formal` with public records.**  The affine release is
+`ρᵢ`-zCDP for every non-public record iff `2 C² wᵢ² / s² ≤ ρᵢ` for every `i ∉ pub`. -/
+theorem affineRelease_hetZCDPPub_iff (hd : 0 < d) {C : ℝ} (hC : 0 ≤ C)
+    (pub : Finset (Fin n)) (w : Fin n → ℝ) {s : ℝ} (hs : 0 < s) (ρ : Fin n → ℝ) :
+    HetZCDPPub pub (affineRelease (d := d) C w s) ρ ↔
+      ∀ i ∉ pub, 2 * C ^ 2 * w i ^ 2 / s ^ 2 ≤ ρ i :=
+  ⟨fun h i hi ↦ (affineRelease_zCDP_iff hd hC w hs i _).1 (h i hi),
+    fun h i hi ↦ (affineRelease_zCDP_iff hd hC w hs i _).2 (h i hi)⟩
+
+/-- `𝒱_pers(θ)` with public records: the infimum of `affineMSE` over the affine releases
+(weights `w ≥ 0`, `∑ w = 1`, noise `s > 0`) that are `ρᵢ`-zCDP for every `i ∉ pub`. -/
+noncomputable def persOracleMSEPub (pub : Finset (Fin n)) (C : ℝ) (ρ : Fin n → ℝ)
+    (P : Measure Ω) (g : Fin n → Ω → EuclideanSpace ℝ (Fin d))
+    (m : EuclideanSpace ℝ (Fin d)) : ℝ :=
+  sInf {r | ∃ (w : Fin n → ℝ) (s : ℝ), (∀ i, 0 ≤ w i) ∧ ∑ i, w i = 1 ∧ 0 < s ∧
+    HetZCDPPub pub (affineRelease (d := d) C w s) ρ ∧ affineMSE P g m w s = r}
+
+/-- **Eq. `eq:gradient-claim-form` with public records.**
+`𝒱_pers(θ) = 𝓡_pers(u; V(θ), 2 d C²)` with `uᵢ = √ρᵢ` for `i ∉ pub`.  The infimum
+defining `𝓡_pers` allows `M = 0` (all weight on public records), which no release with
+`s > 0` attains; the two infima agree by letting `M + δ`, `δ → 0⁺`. -/
+theorem persOracleMSEPub_eq (hd : 0 < d) {C : ℝ} (hC : 0 < C) (pub : Finset (Fin n))
+    (ρ : Fin n → ℝ) (hρ : ∀ i ∉ pub, 0 < ρ i) {P : Measure Ω} [IsProbabilityMeasure P]
+    (g : Fin n → Ω → EuclideanSpace ℝ (Fin d)) (m : EuclideanSpace ℝ (Fin d)) {V : ℝ}
+    (hg : ∀ i, MemLp (g i) 2 P) (hmean : ∀ i, ∫ ω, g i ω ∂P = m) (hind : iIndepFun g P)
+    (hV : ∀ i, ∫ ω, ‖g i ω - m‖ ^ 2 ∂P = V) :
+    persOracleMSEPub pub C ρ P g m = persRisk pub (fun i ↦ √(ρ i)) V (2 * d * C ^ 2) := by
+  have h2 : (√2 : ℝ) ^ 2 = 2 := Real.sq_sqrt (by norm_num)
+  unfold persOracleMSEPub persRisk
+  set S : Set ℝ := {r | ∃ (w : Fin n → ℝ) (s : ℝ), (∀ i, 0 ≤ w i) ∧ ∑ i, w i = 1 ∧ 0 < s ∧
+    HetZCDPPub pub (affineRelease (d := d) C w s) ρ ∧ affineMSE P g m w s = r} with hS
+  set T := persSet pub (fun i ↦ √(ρ i)) V (2 * d * C ^ 2) with hT
+  have hsub : S ⊆ T := by
+    rintro _ ⟨w, s, hw, hsum, hs, hpriv, rfl⟩
+    rw [affineRelease_hetZCDPPub_iff hd hC.le pub w hs ρ] at hpriv
+    refine ⟨w, s / (√2 * C), ⟨hw, hsum, by positivity, fun i hi ↦ ?_⟩, ?_⟩
+    · have h1 := hpriv i hi
+      rw [div_le_iff₀ (by positivity)] at h1
+      have h3 : (√2 * C * w i) ^ 2 ≤ (s * √(ρ i)) ^ 2 := by
+        rw [mul_pow, mul_pow, mul_pow, h2, Real.sq_sqrt (hρ i hi).le]; linarith
+      have h4 := (pow_le_pow_iff_left₀ (by have := hw i; positivity) (by positivity)
+        two_ne_zero).1 h3
+      rw [div_mul_eq_mul_div, le_div_iff₀ (by positivity)]
+      linarith
+    · rw [affineMSE_eq g m hg hmean hind hV w hsum, persObj, div_pow, mul_pow, h2]
+      field_simp
+  have hmem : ∀ w M, Feasible pub (fun i ↦ √(ρ i)) w M → 0 < M →
+      persObj V (2 * d * C ^ 2) w M ∈ S := by
+    rintro w M ⟨hw, hsum, -, hfeas⟩ hMpos
+    have hs2 : (√2 * C * M) ^ 2 = 2 * C ^ 2 * M ^ 2 := by rw [mul_pow, mul_pow, h2]
+    refine ⟨w, √2 * C * M, hw, hsum, by positivity,
+      (affineRelease_hetZCDPPub_iff hd hC.le pub w (by positivity) ρ).2 fun i hi ↦ ?_, ?_⟩
+    · rw [div_le_iff₀ (by positivity), hs2]
+      have h1 := pow_le_pow_left₀ (hw i) (hfeas i hi) 2
+      rw [mul_pow, Real.sq_sqrt (hρ i hi).le] at h1
+      nlinarith [mul_le_mul_of_nonneg_left h1 (by positivity : (0 : ℝ) ≤ 2 * C ^ 2)]
+    · rw [affineMSE_eq g m hg hmean hind hV w hsum, hs2, persObj]
+      ring
+  have hshift : ∀ w M, Feasible pub (fun i ↦ √(ρ i)) w M → ∀ δ, 0 < δ →
+      Feasible pub (fun i ↦ √(ρ i)) w (M + δ) := by
+    rintro w M ⟨hw, hsum, hM, hfeas⟩ δ hδ
+    exact ⟨hw, hsum, by linarith, fun i hi ↦ (hfeas i hi).trans
+      (mul_le_mul_of_nonneg_right (by linarith) (Real.sqrt_nonneg _))⟩
+  rcases T.eq_empty_or_nonempty with he | hne
+  · have hS0 : S = ∅ := Set.subset_empty_iff.1 (he ▸ hsub)
+    rw [he, hS0]
+  obtain ⟨_, w₀, M₀, hf₀, -⟩ := hne
+  obtain ⟨i₀, -⟩ := Finset.nonempty_of_sum_ne_zero (s := univ) (f := w₀)
+    (by rw [hf₀.2.1]; norm_num)
+  have hV0 : 0 ≤ V := hV i₀ ▸ integral_nonneg fun _ ↦ sq_nonneg _
+  have hbdd : BddBelow T :=
+    ⟨0, by rintro _ ⟨w, M, -, rfl⟩; exact persObj_nonneg hV0 (by positivity) w M⟩
+  refine le_antisymm (le_csInf ⟨_, w₀, M₀, hf₀, rfl⟩ ?_)
+    (csInf_le_csInf hbdd ⟨_, hmem w₀ (M₀ + 1) (hshift w₀ M₀ hf₀ 1 one_pos)
+      (by linarith [hf₀.2.2.1])⟩ hsub)
+  rintro _ ⟨w, M, hf, rfl⟩
+  have hcont : Filter.Tendsto (fun δ ↦ persObj V (2 * d * C ^ 2) w (M + δ))
+      (nhdsWithin 0 (Set.Ioi 0)) (nhds (persObj V (2 * d * C ^ 2) w M)) := by
+    have : Continuous fun δ ↦ persObj V (2 * d * C ^ 2) w (M + δ) := by
+      unfold persObj; fun_prop
+    simpa using (this.tendsto 0).mono_left nhdsWithin_le_nhds
+  exact ge_of_tendsto hcont (eventually_nhdsWithin_of_forall fun δ hδ ↦
+    csInf_le (hbdd.mono hsub) (hmem w (M + δ) (hshift w M hf δ hδ)
+      (by linarith [hf.2.2.1, Set.mem_Ioi.1 hδ])))
+
+/-- Noise standard deviation of the threshold release with public records:
+`s_t² = 2 C² / (t² n_t²)`, `n_t` counting the public records and those with `uᵢ ≥ t`. -/
+noncomputable def thrNoisePub (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ) (t : ℝ) : ℝ :=
+  √2 * C / (t * nThr pub u t)
+
+/-- Weights of the threshold release with public records: `1/n_t` on the retained records
+(`i ∈ pub` or `uᵢ ≥ t`), `0` otherwise. -/
+noncomputable def gradThrWeightsPub (pub : Finset (Fin n)) (u : Fin n → ℝ) (t : ℝ)
+    (i : Fin n) : ℝ :=
+  if i ∈ pub ∨ t ≤ u i then ((nThr pub u t : ℕ) : ℝ)⁻¹ else 0
+
+/-- The threshold release with public records: law of
+`(1/n_t) ∑_{i ∈ pub ∨ uᵢ ≥ t} gᵢ + Z_t`, `Z_t ∼ N(0, 2C²/(t² n_t²) I_d)`. -/
+noncomputable def thrReleasePub (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ) (t : ℝ)
+    (D : Fin n → GradBall d C) : Measure (EuclideanSpace ℝ (Fin d)) :=
+  (gaussNoise 0 (thrNoisePub pub C u t)).map fun z ↦
+    ((nThr pub u t : ℕ) : ℝ)⁻¹ • ∑ i ∈ univ.filter (fun i ↦ i ∈ pub ∨ t ≤ u i),
+      (D i : EuclideanSpace ℝ (Fin d)) + z
+
+lemma thrNoisePub_sq (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ) (t : ℝ) :
+    thrNoisePub pub C u t ^ 2 = 2 * C ^ 2 / (t ^ 2 * (nThr pub u t : ℝ) ^ 2) := by
+  rw [thrNoisePub, div_pow, mul_pow, mul_pow, Real.sq_sqrt (by norm_num)]
+
+lemma thrNoisePub_pos (pub : Finset (Fin n)) {C : ℝ} (hC : 0 < C) (u : Fin n → ℝ) {t : ℝ}
+    (ht : 0 < t) (hN : 0 < nThr pub u t) : 0 < thrNoisePub pub C u t := by
+  have : (0 : ℝ) < nThr pub u t := by exact_mod_cast hN
+  unfold thrNoisePub; positivity
+
+lemma sum_gradThrWeightsPub_smul {E : Type*} [AddCommGroup E] [Module ℝ E]
+    (pub : Finset (Fin n)) (u : Fin n → ℝ) (t : ℝ) (x : Fin n → E) :
+    ∑ i, gradThrWeightsPub pub u t i • x i
+      = ((nThr pub u t : ℕ) : ℝ)⁻¹ • ∑ i ∈ univ.filter (fun i ↦ i ∈ pub ∨ t ≤ u i), x i := by
+  rw [Finset.smul_sum, Finset.sum_filter]
+  refine Finset.sum_congr rfl fun i _ ↦ ?_
+  unfold gradThrWeightsPub
+  split_ifs <;> simp
+
+lemma thrReleasePub_eq_affine (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ) (t : ℝ) :
+    thrReleasePub (d := d) pub C u t
+      = affineRelease C (gradThrWeightsPub pub u t) (thrNoisePub pub C u t) := by
+  funext D
+  unfold thrReleasePub affineRelease
+  simp_rw [sum_gradThrWeightsPub_smul]
+
+lemma sum_gradThrWeightsPub (pub : Finset (Fin n)) (u : Fin n → ℝ) {t : ℝ}
+    (hN : 0 < nThr pub u t) : ∑ i, gradThrWeightsPub pub u t i = 1 := by
+  have := sum_gradThrWeightsPub_smul pub u t (fun _ ↦ (1 : ℝ))
+  simp only [smul_eq_mul, mul_one, Finset.sum_const, nsmul_eq_mul] at this
+  rw [this]
+  have h : (#(univ.filter fun i ↦ i ∈ pub ∨ t ≤ u i) : ℝ) = nThr pub u t := rfl
+  have : (0 : ℝ) < nThr pub u t := by exact_mod_cast hN
+  rw [h]
+  field_simp
+
+lemma sum_gradThrWeightsPub_sq (pub : Finset (Fin n)) (u : Fin n → ℝ) (t : ℝ) :
+    ∑ i, gradThrWeightsPub pub u t i ^ 2 = ((nThr pub u t : ℕ) : ℝ)⁻¹ := by
+  have h : ∀ i, gradThrWeightsPub pub u t i ^ 2
+      = (if i ∈ pub ∨ t ≤ u i then 1 else 0) * ((nThr pub u t : ℕ) : ℝ)⁻¹ ^ 2 := by
+    intro i; unfold gradThrWeightsPub; split_ifs <;> simp
+  simp_rw [h]
+  rw [← Finset.sum_mul, Finset.sum_boole]
+  have h' : (#(univ.filter fun i ↦ i ∈ pub ∨ t ≤ u i) : ℝ) = nThr pub u t := rfl
+  rw [h']
+  rcases Nat.eq_zero_or_pos (nThr pub u t) with h0 | h0
+  · simp [h0]
+  · have : (0 : ℝ) < nThr pub u t := by exact_mod_cast h0
+    field_simp
+
+/-- **Eq. `eq:threshold-gradient` with public records: privacy.**  For `t > 0` with
+`n_t ≥ 1`, the threshold release is `ρᵢ`-zCDP for every non-public record (`uᵢ = √ρᵢ`). -/
+theorem thrReleasePub_hetZCDPPub (pub : Finset (Fin n)) {C : ℝ} (hC : 0 < C)
+    (ρ : Fin n → ℝ) (hρ : ∀ i ∉ pub, 0 ≤ ρ i) {t : ℝ} (ht : 0 < t)
+    (hN : 0 < nThr pub (fun i ↦ √(ρ i)) t) :
+    HetZCDPPub pub (thrReleasePub (d := d) pub C (fun i ↦ √(ρ i)) t) ρ := by
+  rw [thrReleasePub_eq_affine]
+  intro i hi
+  refine affineRelease_zCDP_of _ (thrNoisePub_pos pub hC _ ht hN) i ?_
+  have hN' : (0 : ℝ) < nThr pub (fun i ↦ √(ρ i)) t := by exact_mod_cast hN
+  rw [thrNoisePub_sq]
+  unfold gradThrWeightsPub
+  split_ifs with hi'
+  · have hti : t ≤ √(ρ i) := hi'.resolve_left hi
+    have : t ^ 2 ≤ ρ i := by
+      have := pow_le_pow_left₀ ht.le hti 2
+      rwa [Real.sq_sqrt (hρ i hi)] at this
+    calc _ = t ^ 2 := by field_simp
+      _ ≤ ρ i := this
+  · simp [hρ i hi]
+
+/-- Oracle MSE of the threshold release with public records, in the random model of
+`affineMSE`. -/
+noncomputable def thrMSEPub (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ) (t : ℝ)
+    (P : Measure Ω) (g : Fin n → Ω → EuclideanSpace ℝ (Fin d))
+    (m : EuclideanSpace ℝ (Fin d)) : ℝ :=
+  ∫ p, ‖((nThr pub u t : ℕ) : ℝ)⁻¹ • ∑ i ∈ univ.filter (fun i ↦ i ∈ pub ∨ t ≤ u i), g i p.1
+    + p.2 - m‖ ^ 2 ∂(P.prod (gaussNoise 0 (thrNoisePub pub C u t)))
+
+/-- **Eq. `eq:gradient-threshold-risk` with public records, one threshold.**  For `n_t ≥ 1`,
+the MSE of the threshold release is `V/n_t + 2 d C² / (t n_t)²`. -/
+theorem thrMSEPub_eq (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ) {t : ℝ}
+    (hN : 0 < nThr pub u t) {P : Measure Ω} [IsProbabilityMeasure P]
+    (g : Fin n → Ω → EuclideanSpace ℝ (Fin d)) (m : EuclideanSpace ℝ (Fin d)) {V : ℝ}
+    (hg : ∀ i, MemLp (g i) 2 P) (hmean : ∀ i, ∫ ω, g i ω ∂P = m) (hind : iIndepFun g P)
+    (hV : ∀ i, ∫ ω, ‖g i ω - m‖ ^ 2 ∂P = V) :
+    thrMSEPub pub C u t P g m = thrObj V (2 * d * C ^ 2) t (nThr pub u t) := by
+  have h : thrMSEPub pub C u t P g m
+      = affineMSE P g m (gradThrWeightsPub pub u t) (thrNoisePub pub C u t) := by
+    unfold thrMSEPub affineMSE
+    simp_rw [sum_gradThrWeightsPub_smul]
+  rw [h, affineMSE_eq g m hg hmean hind hV _ (sum_gradThrWeightsPub pub u hN),
+    sum_gradThrWeightsPub_sq, thrNoisePub_sq, thrObj]
+  ring
+
+/-- `𝒱_thr(θ)` with public records: the infimum over thresholds `t > 0` with `n_t ≥ 1`
+of the MSE of the threshold release with public records. -/
+noncomputable def thrOracleMSEPub (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ)
+    (P : Measure Ω) (g : Fin n → Ω → EuclideanSpace ℝ (Fin d))
+    (m : EuclideanSpace ℝ (Fin d)) : ℝ :=
+  sInf {r | ∃ t, 0 < t ∧ 0 < nThr pub u t ∧ thrMSEPub pub C u t P g m = r}
+
+/-- **Eq. `eq:gradient-threshold-risk` with public records.**
+`𝒱_thr(θ) = 𝓡_thr(u; V(θ), 2 d C²)`. -/
+theorem thrOracleMSEPub_eq (pub : Finset (Fin n)) (C : ℝ) (u : Fin n → ℝ) {P : Measure Ω}
+    [IsProbabilityMeasure P] (g : Fin n → Ω → EuclideanSpace ℝ (Fin d))
+    (m : EuclideanSpace ℝ (Fin d)) {V : ℝ}
+    (hg : ∀ i, MemLp (g i) 2 P) (hmean : ∀ i, ∫ ω, g i ω ∂P = m) (hind : iIndepFun g P)
+    (hV : ∀ i, ∫ ω, ‖g i ω - m‖ ^ 2 ∂P = V) :
+    thrOracleMSEPub pub C u P g m = thrRisk pub u V (2 * d * C ^ 2) := by
+  unfold thrOracleMSEPub thrRisk
+  congr 1
+  ext r
+  constructor
+  · rintro ⟨t, ht, hN, rfl⟩
+    exact ⟨t, ht, hN, (thrMSEPub_eq pub C u hN g m hg hmean hind hV).symm⟩
+  · rintro ⟨t, ht, hN, rfl⟩
+    exact ⟨t, ht, hN, thrMSEPub_eq pub C u hN g m hg hmean hind hV⟩
+
+/-- **Thm. `thm:gradient-personalization-gap`, public case (oracle level).**  If there are
+both public and private records and every private record has the same budget `ρ₁ > 0`,
+then the best threshold oracle is within a factor 2 of the best personalized oracle:
+`𝒱_thr(θ) ≤ 2 𝒱_pers(θ)`. -/
+theorem gradient_public_factor_two (hd : 0 < d) {C : ℝ} (hC : 0 < C) (pub : Finset (Fin n))
+    (hpub : pub.Nonempty) (hpriv : pubᶜ.Nonempty) (ρ : Fin n → ℝ) {ρ₁ : ℝ} (hρ₁ : 0 < ρ₁)
+    (hρ : ∀ i ∉ pub, ρ i = ρ₁) {P : Measure Ω} [IsProbabilityMeasure P]
+    (g : Fin n → Ω → EuclideanSpace ℝ (Fin d)) (m : EuclideanSpace ℝ (Fin d)) {V : ℝ}
+    (hVpos : 0 < V)
+    (hg : ∀ i, MemLp (g i) 2 P) (hmean : ∀ i, ∫ ω, g i ω ∂P = m) (hind : iIndepFun g P)
+    (hV : ∀ i, ∫ ω, ‖g i ω - m‖ ^ 2 ∂P = V) :
+    thrOracleMSEPub pub C (fun i ↦ √(ρ i)) P g m ≤ 2 * persOracleMSEPub pub C ρ P g m := by
+  rw [thrOracleMSEPub_eq pub C _ g m hg hmean hind hV,
+    persOracleMSEPub_eq hd hC pub ρ (fun i hi ↦ (hρ i hi).symm ▸ hρ₁) g m hg hmean hind hV]
+  have hd' : (0 : ℝ) < d := by exact_mod_cast hd
+  exact public_data_factor_two pub _ (√ρ₁) V (2 * d * C ^ 2) (Real.sqrt_pos.2 hρ₁) hVpos
+    (by positivity) hpub hpriv fun i hi ↦ by simp only [hρ i hi]
+
+end Pub
 
 end Limites
